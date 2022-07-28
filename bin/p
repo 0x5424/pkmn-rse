@@ -1,0 +1,3 @@
+#/usr/bin/zsh
+
+clear && lua ./party-info.lua
