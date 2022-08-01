@@ -68,24 +68,6 @@ function asBin(hexStr, bits)
   return table.concat(t)
 end
 
-function parseName(raw, offset, byteSize)
-  local output = ''
-
-  -- Read 10 bytes; Omit last char pair
-  for i = offset, (offset + ((byteSize * 2) - 1)), 2 do
-    local pair = raw:sub(i, i + 1)
-    local char = CHAR_MAP[pair]
-
-    output = output..(char or ' ')
-  end
-
-  return output
-end
-
-function log(label, result)
-  io.write(label..": "..result.."\n")
-end
-
 -- Parse hex string, default little endian (ff00 -> 255)
 function asDec(raw, bigEndian)
   local little = not bigEndian
@@ -104,56 +86,91 @@ function asDec(raw, bigEndian)
   return tostring(tonumber(toParse, 16))
 end
 
+-- Get # of bytes from hex string, supplying an optional offset (in bytes)
+function getBytes(raw, numBytes, offset)
+  -- If offset given, use it, or default to index 1
+  offset = offset or 0
+  local startIndex = (offset * 2) + 1
+  local charLength = numBytes * 2 -- 2 hex chars = 1 byte
+
+  local endIndex = (startIndex - 1) + charLength
+
+  return raw:sub(startIndex, endIndex)
+end
+
+function parseName(raw, numBytes, offset)
+  local output = ''
+  local startIndex = (offset * 2) + 1
+  local endIndex = startIndex + (numBytes * 2)
+
+  -- Read N bytes; Omit last char pair
+  for i = startIndex, (endIndex - 1), 2 do
+    local pair = raw:sub(i, i + 1)
+    local char = CHAR_MAP[pair]
+
+    output = output..(char or ' ')
+  end
+
+  return output
+end
+
+function log(label, result)
+  io.write(label..": "..result.."\n")
+end
+
+-------- BEGIN PARSING
+
 -- PV = 4 bytes starting at 0 (12, 34, 56, 78)
-local personalityValue = MUDKIP:sub(1, 8)
+local personalityValue = getBytes(MUDKIP, 4)
 log("PV", personalityValue)
 
--- OT ID = 4 bytes starting at byte 4
-local trainerFull = MUDKIP:sub(9, 16)
+-- OT ID = 4 bytes at offset 4
+local trainerFull = getBytes(MUDKIP, 4, 4)
 log("OT", trainerFull)
 
 -- Visible ID = first 2 bytes
-local trainerSecret = trainerFull:sub(1, 4)
+local trainerSecret = getBytes(trainerFull, 2)
 log(" - ID", trainerSecret.." ("..asDec(trainerSecret)..")")
 
 -- Secret ID = last 2 bytes
-local trainerVisible = trainerFull:sub(5, 8)
+local trainerVisible = getBytes(trainerFull, 2, 2)
 log(" - SID", trainerVisible.." ("..asDec(trainerVisible)..")")
 
--- Nickname = 10 bytes starting at byte 8
-local nickname = parseName(MUDKIP, 17, 10)
+-- Nickname = 10 bytes at offset 8
+local nickname = parseName(MUDKIP, 10, 8)
 log("NICKNAME", nickname)
 
--- Language = 1 byte (1=jp, 2=en, 3=fr, 4=it, 5=de, 6=kr, 7=es)
+-- Language = 1 byte at offset 18 (1=jp, 2=en, 3=fr, 4=it, 5=de, 6=kr, 7=es)
 LOCALE_MAP = {
   ["01"] = "ja", ["02"] = "en", ["03"] = "fr",
   ["04"] = "it", ["05"] = "de", ["06"] = "kr",
   ["07"] = "es",
 }
-local lang = MUDKIP:sub(37, 38)
+local lang = getBytes(MUDKIP, 1, 18)
 log("LANG", lang.." ("..LOCALE_MAP[lang]..")")
 
--- Egg name = 1 byte, each bit represents an egg attribute; *MSB bits* 01234 = padding, 5=isEgg, 6=hasSpecies, 7=isValidChecksum (bad egg)
-local eggName = MUDKIP:sub(39, 40)
+-- Egg name = 1 byte at offset 19, each bit represents an egg attribute
+-- *MSB bits* 01234 = padding, 5=isEgg, 6=hasSpecies, 7=isValidChecksum (bad egg)
+local eggName = getBytes(MUDKIP, 1, 19)
 log("EGG", asBin(eggName, 8))
 
--- Trainer name = 7 bytes starting at byte 20
-local trainerName = parseName(MUDKIP, 41, 7)
+-- Trainer name = 7 bytes at offset 20
+local trainerName = parseName(MUDKIP, 7, 20)
 log("TRAINER", trainerName)
 
--- Markings = 1 byte at 27
-local markings = MUDKIP:sub(55, 56)
+-- Markings = 1 byte at offset 27
+local markings = getBytes(MUDKIP, 1, 27)
 log("MARK", markings..' ('..asBin(markings, 8)..')')
 
--- Checksum = 2 bytes starting at byte 28
-local checksum = MUDKIP:sub(57, 60)
+-- Checksum = 2 bytes at offset 28
+local checksum = getBytes(MUDKIP, 2, 28)
 log("CHKSUM", checksum)
 
--- Padding? = 2 bytes starting at byte 30
-log("???", MUDKIP:sub(61, 64))
+-- Padding? = 2 bytes at offset 30
+log("???", getBytes(MUDKIP, 2, 30))
 
--- Pokemon data = 48 bytes starting at byte 32
-local pkmnRaw = MUDKIP:sub(65, 160)
+-- Pokemon data = 48 bytes at offset 32
+local pkmnRaw = getBytes(MUDKIP, 48, 32)
 log("PKMN (raw)", pkmnRaw)
 
 -- Remember: No russian (little endian for all numeric operations)
@@ -167,16 +184,13 @@ log(" - KEY", string.format("%02x", encryptionKey))
 -- Parse each 12 bytes of the raw pokemon data
 for i = 1, 4, 1 do
   local currentStructure = dataOrder:sub(i, i)
-  local endIndex = i * 24 -- 12 bytes
-  local startIndex = (endIndex - 23) -- 1-indexed...
-  local encryptedData = pkmnRaw:sub(startIndex, endIndex)
+  local dataOffset = (i - 1) * 12
+  local encryptedData = getBytes(pkmnRaw, 12, dataOffset)
   local decryptedData = ''
-  -- Decrypt the 12 bytes, 4 bytes at a time
-  for subStr = 1, 3, 1 do
-    local subStrEnd = subStr * 8
-    local subStrBegin = (subStrEnd - 7)
-    local fourBytes = encryptedData:sub(subStrBegin, subStrEnd)
-    local decrypted = tonumber(fourBytes, 16) ~ encryptionKey
+  -- Decrypt the 12 bytes, 4 bytes at a time (offsets= 0, 4, 8)
+  for chunkOffset = 0, 8, 4 do
+    local rawData = getBytes(encryptedData, 4, chunkOffset)
+    local decrypted = tonumber(rawData, 16) ~ encryptionKey
 
     decryptedData = decryptedData..string.format("%08x", decrypted)
   end
@@ -184,41 +198,41 @@ for i = 1, 4, 1 do
   -- TODO: Parse data based on current structure; parse("G", data) => {species: 'etc'...}
 end
 
--- Status = 4 bytes starting from byte 80
-local pkmnStatus = MUDKIP:sub(161, 168)
+-- Status = 4 bytes at offset 80
+local pkmnStatus = getBytes(MUDKIP, 4, 80)
 log("STATUS", pkmnStatus..(' ('..asBin(pkmnStatus, 32)..')'))
 
--- Level = 1 byte at 84
-local pkmnLevel = MUDKIP:sub(169, 170)
+-- Level = 1 byte at offset 84
+local pkmnLevel = getBytes(MUDKIP, 1, 84)
 log("LV", asDec(pkmnLevel))
 
--- Pokerus = 1 byte at 85
-local pkmnPkrs = MUDKIP:sub(171, 172)
+-- Pokerus = 1 byte at offset 85
+local pkmnPkrs = getBytes(MUDKIP, 1, 85)
 log("PKRS", asBin(pkmnPkrs))
 
--- Current HP = 2 bytes starting from byte 86
--- Max HP = 2 bytes starting from byte 88
-local currentHp = MUDKIP:sub(173, 176)
-local maxHp = MUDKIP:sub(177, 180)
+-- Current HP = 2 bytes at offset 86
+-- Max HP = 2 bytes at offset 88
+local currentHp = getBytes(MUDKIP, 2, 86)
+local maxHp = getBytes(MUDKIP, 2, 88)
 log("HP", asDec(currentHp)..'/'..asDec(maxHp))
 
--- Attack = 2 bytes starting from byte 90
-local attack = MUDKIP:sub(181, 184)
+-- Attack = 2 bytes at offset 90
+local attack = getBytes(MUDKIP, 2, 90)
 log("ATTACK", asDec(attack))
 
--- Defense = 2 bytes starting from byte 92
-local defense = MUDKIP:sub(185, 188)
+-- Defense = 2 bytes at offset 92
+local defense = getBytes(MUDKIP, 2, 92)
 log("DEFENSE", asDec(defense))
 
--- Speed = 2 bytes starting from byte 94
-local speed = MUDKIP:sub(189, 192)
+-- Speed = 2 bytes at offset 94
+local speed = getBytes(MUDKIP, 2, 94)
 log("SPEED", asDec(speed))
 
--- Special Attack = 2 bytes starting from byte 96
-local spAttack = MUDKIP:sub(193, 196)
+-- Special Attack = 2 bytes at offset 96
+local spAttack = getBytes(MUDKIP, 2, 96)
 log("SP.ATTACK", asDec(spAttack))
 
--- Special Defense = last 2 bytes starting from byte 98
-local spDefense = MUDKIP:sub(197, 200)
+-- Special Defense = last 2 bytes at offset 98
+local spDefense = getBytes(MUDKIP, 2, 98)
 log("SP.DEFENSE", asDec(spDefense))
 
