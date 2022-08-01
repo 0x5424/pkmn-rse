@@ -4,6 +4,7 @@
 -- [ ] Add frame loop to constantly run this check
 -- [ ] Move shared logic to utils
 
+-- Proprietary encoding used for a few text fields
 CHAR_MAP = {
     ["bb"] = "A", ["bc"] = "B", ["bd"] = "C",
     ["be"] = "D", ["bf"] = "E", ["c0"] = "F",
@@ -23,6 +24,16 @@ CHAR_MAP = {
     ["e7"] = "s", ["e8"] = "t", ["e9"] = "u",
     ["ea"] = "v", ["eb"] = "w", ["ec"] = "x",
     ["ed"] = "y", ["ee"] = "z"
+}
+
+-- 48 bytes starting at 32 are encoded; The pokemon PV mod 24 determines the substructure order
+SUBSTRUCTURE_MAP = {
+  [0] = "GAEM",   [1] = "GAME",  [2] = "GEAM",  [3] = "GEMA",
+  [4] = "GMAE",   [5] = "GMEA",  [6] = "AGEM",  [7] = "AGME",
+  [8] = "AEGM",   [9] = "AEMG", [10] = "AMGE", [11] = "AMEG",
+  [12] = "EGAM", [13] = "EGMA", [14] = "EAGM", [15] = "EAMG",
+  [16] = "EMGA", [17] = "EMAG", [18] = "MGAE", [19] = "MGEA",
+  [20] = "MAGE", [21] = "MAEG", [22] = "MEGA", [23] = "MEAG"
 }
 
 --[[
@@ -142,8 +153,36 @@ log("CHKSUM", checksum)
 log("???", MUDKIP:sub(61, 64))
 
 -- Pokemon data = 48 bytes starting at byte 32
-log("PKMN (raw)", MUDKIP:sub(65, 160))
--- TODO: Format raw pkmn data
+local pkmnRaw = MUDKIP:sub(65, 160)
+log("PKMN (raw)", pkmnRaw)
+
+-- Remember: No russian (little endian for all numeric operations)
+local pvModulo = asDec(personalityValue) % 24
+local dataOrder = SUBSTRUCTURE_MAP[pvModulo]
+log(" - ORDER", tostring(pvModulo)..'. '..dataOrder)
+
+local encryptionKey = tonumber(trainerFull, 16) ~ tonumber(personalityValue, 16)
+log(" - KEY", string.format("%02x", encryptionKey))
+
+-- Parse each 12 bytes of the raw pokemon data
+for i = 1, 4, 1 do
+  local currentStructure = dataOrder:sub(i, i)
+  local endIndex = i * 24 -- 12 bytes
+  local startIndex = (endIndex - 23) -- 1-indexed...
+  local encryptedData = pkmnRaw:sub(startIndex, endIndex)
+  local decryptedData = ''
+  -- Decrypt the 12 bytes, 4 bytes at a time
+  for subStr = 1, 3, 1 do
+    local subStrEnd = subStr * 8
+    local subStrBegin = (subStrEnd - 7)
+    local fourBytes = encryptedData:sub(subStrBegin, subStrEnd)
+    local decrypted = tonumber(fourBytes, 16) ~ encryptionKey
+
+    decryptedData = decryptedData..string.format("%08x", decrypted)
+  end
+  log(" - "..currentStructure, decryptedData)
+  -- TODO: Parse data based on current structure; parse("G", data) => {species: 'etc'...}
+end
 
 -- Status = 4 bytes starting from byte 80
 local pkmnStatus = MUDKIP:sub(161, 168)
@@ -182,3 +221,4 @@ log("SP.ATTACK", asDec(spAttack))
 -- Special Defense = last 2 bytes starting from byte 98
 local spDefense = MUDKIP:sub(197, 200)
 log("SP.DEFENSE", asDec(spDefense))
+
