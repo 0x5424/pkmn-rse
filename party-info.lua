@@ -55,6 +55,11 @@ MUDKIP = "bb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4e15e
 
 MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4e15ed7f4e15ed7f4e15ec7f1408b7fa9e25ed7f4e145d6f4e1c8d7f4e15e9ff4e17fd7d9e15ed7f4e17dfff4e10000000005ff150015000c000b0009000b000a00"
 
+-- actually cascoon
+-- MUDKIP = "9de847ffe1dd6e3bbdbbcdbdc9c9c8ff80430202c5d9e2ffffffff00a4f100007c3529c47c3529c47c3529c4593429c4013529c47c7329c47c0eace45875f8c97c3529c4163529c47c3529c4623529c4"
+
+-------- UTILS
+
 -- Returns bits as given; eg. 0f = 00001111, f0 = 11110000
 function asBin(hexStr, bits)
   local num = tonumber(hexStr, 16)
@@ -164,10 +169,10 @@ log("MARK", markings..' ('..asBin(markings, 8)..')')
 
 -- Checksum = 2 bytes at offset 28
 local checksum = getBytes(MUDKIP, 2, 28)
-log("CHKSUM", checksum)
+log("CHKSUM", checksum.." ("..asDec(checksum)..")")
 
 -- Padding? = 2 bytes at offset 30
-log("???", getBytes(MUDKIP, 2, 30))
+log("????", getBytes(MUDKIP, 2, 30))
 
 -- Pokemon data = 48 bytes at offset 32
 local pkmnRaw = getBytes(MUDKIP, 48, 32)
@@ -178,25 +183,53 @@ local pvModulo = asDec(personalityValue) % 24
 local dataOrder = SUBSTRUCTURE_MAP[pvModulo]
 log(" - ORDER", tostring(pvModulo)..'. '..dataOrder)
 
+-- XOR operation: Use endianness as-is
 local encryptionKey = tonumber(trainerFull, 16) ~ tonumber(personalityValue, 16)
 log(" - KEY", string.format("%02x", encryptionKey))
 
+local calculatedChecksum = 0
 -- Parse each 12 bytes of the raw pokemon data
 for i = 1, 4, 1 do
+  -- G, A, M, or E
   local currentStructure = dataOrder:sub(i, i)
-  local dataOffset = (i - 1) * 12
-  local encryptedData = getBytes(pkmnRaw, 12, dataOffset)
-  local decryptedData = ''
-  -- Decrypt the 12 bytes, 4 bytes at a time (offsets= 0, 4, 8)
-  for chunkOffset = 0, 8, 4 do
-    local rawData = getBytes(encryptedData, 4, chunkOffset)
-    local decrypted = tonumber(rawData, 16) ~ encryptionKey
 
-    decryptedData = decryptedData..string.format("%08x", decrypted)
+  local dataOffset = (i - 1) * 12
+  local dataEncrypted = getBytes(pkmnRaw, 12, dataOffset)
+  local dataDecrypted = ''
+
+  -- Decrypt 4 bytes at a time
+  for blockOffset = 0, 8, 4 do
+    local rawBlock = getBytes(dataEncrypted, 4, blockOffset)
+    -- XOR operation: Use endianness as-is
+    local decrypted = tonumber(rawBlock, 16) ~ encryptionKey
+    local formattedDecrypted = string.format('%08x', decrypted)
+
+    dataDecrypted = dataDecrypted..formattedDecrypted
   end
-  log(" - "..currentStructure, decryptedData)
+
+  log(" - "..currentStructure, dataDecrypted)
+
+  -- Generate checksum by reading decrypted data 2 bytes at a time
+  for wordOffset = 0, 10, 2 do
+    local word = getBytes(dataDecrypted, 2, wordOffset)
+    -- Sum each word, little endian; Eg.
+    -- ff00 ff00 ff00 = 255 + 255 + 255 -> 765
+    -- When comparing to checksum at offset 28, upper 2 bytes ignored; Eg.
+    -- checksum: 0200 == 2 (dec)
+    -- Adding: ffff + 0300 -> 65538 (in decimal), 0x02000100 little endian
+    -- calculated: 0x0200 == 2 in decimal
+    calculatedChecksum = calculatedChecksum + tonumber(asDec(word))
+  end
+
   -- TODO: Parse data based on current structure; parse("G", data) => {species: 'etc'...}
 end
+
+-- Drop upper 2 bytes (there must be a better way...)
+local formattedChecksum = asDec(string.format('%08x', calculatedChecksum)) -- start: 0d65538 -> '00010002' -> '33554688'
+formattedChecksum = string.format('%08x', tonumber(formattedChecksum)):sub(1, 4) -- 0d33554688 -> '02000100' -> final: '0200'
+
+local checksumMatch = checksum == formattedChecksum
+log(" - CALC_SUM", formattedChecksum..' (match: '..(checksumMatch and 'OK' or 'BAD EGG!')..')')
 
 -- Status = 4 bytes at offset 80
 local pkmnStatus = getBytes(MUDKIP, 4, 80)
