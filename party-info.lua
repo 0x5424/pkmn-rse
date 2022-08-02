@@ -123,6 +123,59 @@ function log(label, result)
   io.write(label..": "..result.."\n")
 end
 
+function parseSubstruct(kind, decryptedData)
+  -- Byte offsets
+  local order = {
+    ['G'] = {
+      -- KEY     => offset, length (both in bytes)
+      ['SPECIES'] = {0, 2},
+      ['HELD_ITEM'] = {2 ,2},
+      ['EXP'] = {4 ,4},
+      ['PP'] = {8 ,1},
+      ['FRIENDSHIP'] = {9 ,1},
+      ['?'] = {10, 2} -- likely padding
+    },
+    ['A'] = {
+      ['MOVE1'] = {0, 2},
+      ['MOVE2'] = {2, 2},
+      ['MOVE3'] = {4, 2},
+      ['MOVE4'] = {6, 2},
+      ['PP1'] = {8, 1},
+      ['PP2'] = {9, 1},
+      ['PP3'] = {10, 1},
+      ['PP4'] = {11, 1}
+    },
+    ['E'] = {
+      ['HP ev'] = {0, 1},
+      ['ATK ev'] = {1, 1}, ['DEF ev'] = {2, 1},
+      ['SPEED ev'] = {3, 1},
+      ['SP.ATK ev'] = {4, 1}, ['SP.DEF ev'] = {5, 1},
+      ['COOL'] = {6, 1}, ['BEAUTY'] = {7, 1}, ['CUTE'] = {8, 1}, ['SMART'] = {9, 1}, ['TOUGH'] = {10, 1},
+      ['FEEL'] = {11, 1}
+    },
+    ['M'] = {
+      ['POKERUS'] = {0, 1}, ['MET'] = {1, 1},
+      ['ORIGIN'] = {2, 2},
+      ['IV'] = {4, 4},
+      ['RIBBON'] = {8, 4}
+    }
+  }
+  assert(order[kind], "kind must be G, A, M, or E")
+
+  -- TODO: Add remaining formats
+  if (not(kind == 'G')) then return 'todo' end
+
+  local out = ''
+  for key, offsets in pairs(order[kind]) do
+    local start = offsets[1]
+    local size = offsets[2]
+
+    out = out..' '..key..' '..asDec(getBytes(decryptedData, size, start))
+  end
+
+  return out
+end
+
 -------- BEGIN PARSING
 
 -- PV = 4 bytes starting at 0 (12, 34, 56, 78)
@@ -221,7 +274,8 @@ for i = 1, 4, 1 do
     calculatedChecksum = calculatedChecksum + tonumber(asDec(word))
   end
 
-  -- TODO: Parse data based on current structure; parse("G", data) => {species: 'etc'...}
+  local dataFormatted = parseSubstruct(currentStructure, dataDecrypted)
+  log('data', tostring(dataFormatted))
 end
 
 -- Drop upper 2 bytes (there must be a better way...)
