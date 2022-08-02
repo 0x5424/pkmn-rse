@@ -60,6 +60,9 @@ MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4
 
 -------- UTILS
 
+-- Defines the ALL_POKEMON table
+require("pkmn")
+
 -- Returns bits as given; eg. 0f = 00001111, f0 = 11110000
 function asBin(hexStr, bits)
   local num = tonumber(hexStr, 16)
@@ -123,6 +126,14 @@ function log(label, result)
   io.write(label..": "..result.."\n")
 end
 
+function formatValue(key, value)
+  local intValue = tonumber(asDec(value))
+
+  if (key == 'SPECIES') then return ALL_POKEMON[intValue] end
+
+  return intValue
+end
+
 function parseSubstruct(kind, decryptedData)
   -- Byte offsets
   local order = {
@@ -162,18 +173,13 @@ function parseSubstruct(kind, decryptedData)
   }
   assert(order[kind], "kind must be G, A, M, or E")
 
-  -- TODO: Add remaining formats
-  if (not(kind == 'G')) then return 'todo' end
-
-  local out = ''
   for key, offsets in pairs(order[kind]) do
     local start = offsets[1]
     local size = offsets[2]
+    local value = getBytes(decryptedData, size, start)
 
-    out = out..' '..key..' '..asDec(getBytes(decryptedData, size, start))
+    log('   * '..key, formatValue(key, value))
   end
-
-  return out
 end
 
 -------- BEGIN PARSING
@@ -274,8 +280,8 @@ for i = 1, 4, 1 do
     calculatedChecksum = calculatedChecksum + tonumber(asDec(word))
   end
 
-  local dataFormatted = parseSubstruct(currentStructure, dataDecrypted)
-  log('data', tostring(dataFormatted))
+  -- Logs values
+  parseSubstruct(currentStructure, dataDecrypted)
 end
 
 -- Drop upper 2 bytes (there must be a better way...)
