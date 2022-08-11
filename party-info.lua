@@ -53,7 +53,7 @@ MUDKIP = "bb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4e15e
 
 ]]
 
-MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4e15ed7f4e15ed7f4e15ec7f1408b7fa9e25ed7f4e145d6f4e1c8d7f4e15e9ff4e17fd7d9e15ed7f4e17dfff4e10000000005ff150015000c000b0009000b000a00"
+MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0857d000005ed6f4e15ed7f4e15ed7f4e15ec7f1408b7fa9e25ed7f4e145d6f4e1c8d7f4e15e9ff4e17fd7d9e15ed7f4e17ffff4e10000000005ff120015000c000b0009000b000a00"
 
 -- actually cascoon
 -- MUDKIP = "9de847ffe1dd6e3bbdbbcdbdc9c9c8ff80430202c5d9e2ffffffff00a4f100007c3529c47c3529c47c3529c4593429c4013529c47c7329c47c0eace45875f8c97c3529c4163529c47c3529c4623529c4"
@@ -62,6 +62,12 @@ MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4
 
 -- Defines the ALL_POKEMON table
 require("pkmn")
+
+-- Defines the ALL_MOVES table
+require("moves")
+
+-- Defines the ALL_LOCATIONS table
+require("locations")
 
 -- Returns bits as given; eg. 0f = 00001111, f0 = 11110000
 function asBin(hexStr, bits)
@@ -126,10 +132,77 @@ function log(label, result)
   io.write(label..": "..result.."\n")
 end
 
+function formatIV(hexStr)
+  assert(#hexStr == 8, 'must be 4 bytes')
+  -- Fix endianness, once again
+  -- eg. 0xd5a85d03 == 11010101101010000101110100000011 in bigEndian
+  -- but the actual bin order should be: 00000011010111011010100011010101
+  -- 31-Ability = 0
+  -- 30-Egg     = 0
+  -- 25-Sp.Def  = 00001  (1)
+  -- 20-Sp.Atk  = 10101 (21)
+  -- 14-Speed   = 11011 (27)
+  -- 10-Defense = 01010 (10)
+  -- 5-Attack   = 00110  (6)
+  -- 0-HP       = 10101 (21)
+  local binStr = asBin(hexStr, 32)
+
+  -- Parse IVs 5 bits at a time; (TODO: make DRY)
+  local hpIV =    tonumber(binStr:sub(28, 32), 2)
+  local atkIV =   tonumber(binStr:sub(23, 27), 2)
+  local defIV =   tonumber(binStr:sub(18, 22), 2)
+  local speedIV = tonumber(binStr:sub(13, 17), 2)
+  local spAtkIV = tonumber(binStr:sub(8, 12), 2)
+  local spDefIV = tonumber(binStr:sub(3, 7), 2)
+
+  return 'hp '..hpIV..', atk '..atkIV..', def '..defIV..', spAtk '..spAtkIV..', spDef '..spDefIV..', speed '..speedIV
+end
+
+function formatOrigin(hexStr)
+  assert(#hexStr == 4, 'must be 2 bytes')
+  -- Endianness should already be flipped
+  local binStr = asBin(hexStr, 16)
+
+  local sex =  binStr:sub(1, 1) == '1' and 'f' or 'm'
+  local ball = tonumber(binStr:sub(2, 5), 2)
+  local game = tonumber(binStr:sub(6, 9), 2)
+  local levelMet = tonumber(binStr:sub(10, 16), 2)
+
+  local balls = {
+    [1] = 'Master Ball',
+    [2] = 'Ultra Ball',
+    [3] = 'Great Ball',
+    [4] = 'Poké Ball',
+    [5] = 'Safari Ball',
+    [6] = 'Net Ball',
+    [7] = 'Dive Ball',
+    [8] = 'Nest Ball',
+    [9] = 'Repeat Ball',
+    [10] = 'Timer Ball',
+    [11] = 'Luxury Ball',
+    [12] = 'Premier Ball'
+  }
+
+  local games = {
+    [1] = 'Sapphire', [2] = 'Ruby', [3] = 'Emerald',
+    [4] = 'Fire Red', [5] = 'Leaf Green',
+    [15] = 'Gamecube'
+  }
+
+  local met = levelMet == 0 and 'Hatched' or 'Caught at Lv.'..tostring(levelMet)
+
+  return 'OT '..sex..', '..balls[ball]..', '..games[game]..', '..met
+end
+
 function formatValue(key, value)
   local intValue = tonumber(asDec(value))
+  local flipEndian = string.format('%08x', intValue)
 
   if (key == 'SPECIES') then return ALL_POKEMON[intValue] end
+  if (string.match(key, '^MOVE%d$')) then return ALL_MOVES[intValue] end
+  if (key == 'MET') then return ALL_LOCATIONS[intValue] end
+  if (key == 'ORIGIN') then return formatOrigin(flipEndian:sub(5, 8)) end
+  if (key == 'IV') then return formatIV(flipEndian) end
 
   return intValue
 end
@@ -165,7 +238,8 @@ function parseSubstruct(kind, decryptedData)
       ['FEEL'] = {11, 1}
     },
     ['M'] = {
-      ['POKERUS'] = {0, 1}, ['MET'] = {1, 1},
+      ['POKERUS'] = {0, 1},
+      ['MET'] = {1, 1},
       ['ORIGIN'] = {2, 2},
       ['IV'] = {4, 4},
       ['RIBBON'] = {8, 4}
