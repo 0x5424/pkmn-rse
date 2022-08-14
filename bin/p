@@ -1,3 +1,5 @@
-#/usr/bin/zsh
+#/usr/bin/bash
 
-clear && lua ./party-info.lua
+# Small debug script to quickly `p`rint the information for a mon
+
+clear && lua ./parse-mon.lua

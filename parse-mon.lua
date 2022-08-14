@@ -1,8 +1,14 @@
--- TODO (in order):
--- [ ] Fetch party slot0 pokemon (first mon)
--- [ ] Fetch rest
--- [ ] Add frame loop to constantly run this check
+-- TODO:
+-- [ ] Species lookup for additional info
+--   * [ ] Exp growth rates
+--   * [ ] Base stats
+--   * [ ] "Rebuild" into valid party mon
+-- [ ] Remove hard-coded constants (MUDKIP)
 -- [ ] Move shared logic to utils
+-- [ ] Allow use on boxed mons
+--   * [ ] Stop parsing after 81st byte
+-- [ ] Improve error handling
+--   * [ ] Also consider initialized state (ie. fresh boot, enemy mon = 000...)
 
 -- Proprietary encoding used for a few text fields
 CHAR_MAP = {
@@ -54,6 +60,7 @@ MUDKIP = "bb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0f59d000005ed6f4e15e
 ]]
 
 MUDKIP = "881cbb6ad6cb4f8bbce9d8ffffffffffffff0202bbd3bfffffffff0857d000005ed6f4e15ed7f4e15ed7f4e15ec7f1408b7fa9e25ed7f4e145d6f4e1c8d7f4e15e9ff4e17fd7d9e15ed7f4e17ffff4e10000000005ff120015000c000b0009000b000a00"
+-- MUDKIP = "227e0301d6cb4f8bd1c3c8c1cfc6c6ff80430202bbd3bfffffffff00101a0000c1b44c8aefb54c8af4f34c8af4b54c8af4b54c8af4b54c8ad9b57b8af4b54c8adcac4c8af4a74f2b106801a2f4b54c8a0000000003ff0f000f00070007000b0008000600"
 
 -- actually cascoon
 -- MUDKIP = "9de847ffe1dd6e3bbdbbcdbdc9c9c8ff80430202c5d9e2ffffffff00a4f100007c3529c47c3529c47c3529c4593429c4013529c47c7329c47c0eace45875f8c97c3529c4163529c47c3529c4623529c4"
