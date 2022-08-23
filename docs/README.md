@@ -28,7 +28,7 @@ Read the documentation for each script in the dedicated subsection:
 
 Upon enabling the script, will place 4 buffers into the scripting window:
 1. Info for the pokemon in slot 1 (active mon). It will be named after the mon's nickname
-2. Info for the remaining pokemon (slots 2-6)
+2. Raw info for all party pokemon & wild mon, formatted in pokemon showdown's expected syntax
 3. Information about the current wild pokemon. Outside of battle, it will be the last encountered mon.
 4. Damage calculations for each move in the party vs the opposing mon
 
