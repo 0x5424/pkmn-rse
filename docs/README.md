@@ -9,7 +9,7 @@ Lua scripts designed for use with the [`mgba`](https://github.com/mgba-emu/mgba)
 
 ## Setup
 
-As of July 2022 mGBA has yet to release an official `0.10.x` build with Lua scripting available.
+As of October 2022 mGBA has yet to release an official `0.10.x` build with Lua scripting available.
 As such, to use any of these scripts one must [compile the project manually](https://github.com/mgba-emu/mgba#compiling).
 
 ## Scripts
@@ -48,8 +48,3 @@ Unsorted list of next steps:
 - [ ] write-mon module
 - [ ] Networking example script
 
-## Gotchas
-
-- Though Windows support for scripts with networking is likely possible, it is unsupported in this project.
-
-![A transitive dependency of luasocket, cqueues, currently doesn't support Microsoft Windows operating systems.](https://media.discordapp.net/attachments/341376653982695435/996685633592492114/Screen_Shot_2022-07-13_at_16.50.21.png)
